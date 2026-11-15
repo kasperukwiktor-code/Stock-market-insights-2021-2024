@@ -30,7 +30,7 @@ def transform_data(df):
 
 def load_data(df, ticker):
     today = datetime.today().strftime("%Y-%m-%d")
-    file_name = f"data/{ticker}_{today}.csv"
+    file_name = f"data/{ticker}.csv"
     df.to_csv(file_name, index=False)
 
 
