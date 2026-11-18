@@ -19,3 +19,9 @@ models:  # <--- To musi być w tej samej linii co 'sources:'
         tests:
           - unique
           - not_null
+      - name: ticker
+        tests:
+          - not_null
+      - name: date
+        tests:
+          - not_null

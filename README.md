@@ -1,88 +1,109 @@
 # Stock Market Insights (2021–2024)
 
-## 📊 Project Overview
-End-to-end data pipeline for analyzing stock market trends across 7 companies (Jan 2021 – Dec 2024).
-Built to demonstrate a production-style analytics engineering workflow using a modern data stack.
+An end-to-end analytics engineering portfolio project analyzing daily prices for seven US-listed companies from January 2021 through December 2024: TSLA, AAPL, MSFT, PLTR, AMD, LMT, and AVGO.
 
-**Companies analyzed:** TSLA, AAPL, MSFT, PLTR, AMD, LMT, AVGO
+The repository includes the Python extraction pipeline, dbt models, a sample combined CSV, and a Power BI dashboard screenshot. Azure Blob Storage and Snowflake are the intended cloud services. Running those cloud steps requires active Azure and Snowflake accounts; the repository does not include credentials or a live hosted pipeline.
 
-## 🧱 Architecture
-yfinance API → Python ETL → Azure Blob Storage → Snowflake → dbt → Power BI
+## Architecture
+
+```text
+yfinance → Python ETL → all_stocks.csv → Azure Blob Storage → Snowflake RAW.STOCK_PRICES → dbt → Power BI
+```
 
 | Layer | Tool | Purpose |
 |---|---|---|
-| Extraction | Python + yfinance | Pull historical OHLCV data |
-| Storage | Azure Blob Storage | Raw data landing zone (Bronze) |
-| Loading | Snowflake external stage + `COPY INTO` | Load raw CSVs from Blob into the RAW schema |
-| Warehouse | Snowflake | Cloud data warehouse |
-| Transformation | dbt Core | Staging + mart models, data tests |
-| Visualization | Power BI | Interactive dashboard |
+| Extraction | Python, yfinance, pandas | Download adjusted daily OHLCV prices and derive return and moving-average columns |
+| Local handoff | `data/all_stocks.csv` | One canonical CSV containing all tickers |
+| Object storage | Azure Blob Storage | Store the canonical CSV in the `raw-data` container |
+| Warehouse | Snowflake | Load the CSV into `STOCK_MARKET.RAW.STOCK_PRICES` |
+| Transformation | dbt Core, dbt-snowflake | Deduplicate identical rows, validate the daily grain, and build monthly aggregates |
+| Visualization | Power BI | Explore price, volume, and return metrics; screenshot in `Images/` |
 
-## ⚙️ Tech Stack
-Python · SQL · dbt Core · Snowflake · Azure Blob Storage · Power BI · Git
+## Repository layout
 
-## 📁 Project Structure
-```
-Stock-market-insights-2021-2025/
-├── etl/
-│   ├── extract_stock_data.py   # Extract & transform via yfinance
-│   └── upload_to_blob.py       # Upload CSV to Azure Blob
-├── stock_market/               # dbt project
-│   └── models/
-│       ├── staging/            # stg_stock_prices (view)
-│       └── mart/               # mart_stock_prices (table)
-├── data/                       # Local CSV output
-├── Images/                     # Dashboard screenshot
-└── README.md
+```text
+etl/                         Extraction and Azure upload scripts
+data/all_stocks.csv          Combined sample dataset (one row per ticker/date)
+stock_market/                dbt project
+Images/dashboard.png         Dashboard screenshot
 ```
 
-## 📈 dbt Models
-**Staging** — `stg_stock_prices`
-- Cleans and validates raw data from the Snowflake RAW schema
-- Filters nulls, standardizes column names
+## Data and metrics
 
-**Mart** — `mart_stock_prices`
-- Grain: one row per ticker per month
-- Metrics: avg/min/max close price, avg daily return, total volume, 7-day moving average
+- The checked-in sample contains 7,035 rows: 1,005 trading days for each of seven tickers, dated 2021-01-04 through 2024-12-31.
+- `daily_return` is a fraction, not a number multiplied by 100. For example, `0.002` means `0.2%`. Format it as a percentage in Power BI.
+- The first daily return and first six 7-day moving averages for each ticker are null by design.
+- The mart grain is one row per ticker and calendar month. It contains average/minimum/maximum adjusted close, average daily return, average 7-day moving average, and total shares traded.
+- Average daily return is an arithmetic mean, not a risk-adjusted performance measure. Volume counts shares, not traded dollar value.
 
-**Data tests** (`schema.yml`): `unique` and `not_null` checks on model keys.
+The dashboard screenshot shows the checked-in sample. It is not a live connection, and the original Power BI report file is not included.
 
-## 📊 Dashboard (Power BI)
-![Dashboard](Images/dashboard.png)
-- Monthly closing price trends per ticker
-- Stock popularity ranking by trading volume (shares traded)
-- Return vs. Price Level scatter plot (avg daily return vs. avg closing price)
-- KPIs: earliest/latest reporting period, total volume, avg daily return, ticker count
+## Run locally
 
-## 🔑 Key Results
-- 7 tickers × 4 years = ~7,000 daily records processed
-- AVGO and PLTR had the highest average daily return (~0.2%/day)
-- LMT had the lowest average daily return (~0.05%/day) at the highest price level
-- Average daily return is an arithmetic mean and does not account for volatility
+Python 3.10 or newer is recommended. Install the extraction dependencies:
 
-## 🚀 How to Run
 ```bash
-# 1. Install dependencies
-pip install yfinance pandas azure-storage-blob python-dotenv dbt-snowflake
-
-# 2. Create a .env file in the project root
-echo 'AZURE_CONNECTION_STRING=<your-connection-string>' > .env
-
-# 3. Extract and upload raw data (container: raw-data)
-python etl/extract_stock_data.py
-python etl/upload_to_blob.py
-
-# 4. Load from Blob into Snowflake (RAW schema) via external stage
-#    COPY INTO RAW.<table> FROM @<external_stage> FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1);
-
-# 5. Run dbt (Snowflake credentials in ~/.dbt/profiles.yml)
-cd stock_market
-dbt run
-dbt test
+python -m pip install yfinance pandas
 ```
 
-## ⚠️ Limitations & Next Steps
-- **Risk metrics:** replace the price-level axis with standard deviation of daily returns and add a Sharpe ratio for a proper risk/return view
-- **Volume:** ranking is based on shares traded; traded value (close × volume) would remove the bias towards low-priced stocks
-- **Incremental loads:** the pipeline reloads the full history on every run
-- **Orchestration:** scheduling (GitHub Actions / Airflow) is not set up yet
+Generate the combined CSV:
+
+```bash
+python etl/extract_stock_data.py
+```
+
+This replaces `data/all_stocks.csv`. The date range is fixed to 2021-01-01 through 2024-12-31; yfinance's end date is exclusive. The current yfinance response can change over time, so regenerated adjusted-price values may differ slightly from the checked-in snapshot.
+
+## Optional Azure and Snowflake steps
+
+These steps need valid credentials and provisioned services. No credentials are stored in this repository.
+
+1. Create an Azure Blob container named `raw-data`.
+2. Put `AZURE_CONNECTION_STRING` in a root-level `.env` file. Keep `.env` private; it is ignored by Git.
+3. Upload only the canonical file:
+
+   ```bash
+   python -m pip install azure-storage-blob python-dotenv
+   python etl/upload_to_blob.py
+   ```
+
+4. In Snowflake, configure an external stage and CSV file format for that container, then load `all_stocks.csv` into `STOCK_MARKET.RAW.STOCK_PRICES`. The target table should have the CSV columns in the same order: `DATE, CLOSE, HIGH, LOW, OPEN, VOLUME, TICKER, DAILY_RETURN, MOVING_AVG_7D, YEAR, MONTH`. Load only `all_stocks.csv`; do not load per-ticker copies alongside it.
+
+   For a deliberate full refresh of this dedicated RAW table, clear it before reloading and force Snowflake to read the file again (otherwise Snowflake's load history can skip a file it has already seen):
+
+   ```sql
+   TRUNCATE TABLE STOCK_MARKET.RAW.STOCK_PRICES;
+
+   COPY INTO STOCK_MARKET.RAW.STOCK_PRICES
+   FROM @<your_external_stage>/all_stocks.csv
+   FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1)
+   FORCE = TRUE
+   ON_ERROR = 'ABORT_STATEMENT';
+   ```
+
+   Replace `<your_external_stage>` with the stage name you configured. `TRUNCATE` removes the existing table rows, so use this only when a full replacement is intended.
+
+5. Install dbt and the Snowflake adapter, create a local `~/.dbt/profiles.yml` for the `stock_market` profile, then run:
+
+   ```bash
+   python -m pip install dbt-snowflake
+   cd stock_market
+   dbt deps
+   dbt run
+   dbt test
+   ```
+
+   The dbt source is configured as database `STOCK_MARKET`, schema `RAW`, table `STOCK_PRICES`. The profile and Snowflake account are not included, so cloud execution cannot be reproduced without configuring them.
+
+## Dashboard and findings
+
+![Power BI dashboard screenshot](Images/dashboard.png)
+
+The sample shows AVGO and PLTR with the highest arithmetic mean daily returns (about 0.21% and 0.207% per trading day), and LMT with the lowest (about 0.053%). These figures do not account for volatility, dividends, or risk. The dashboard's volume ranking is based on shares traded, which favors lower-priced stocks; traded value (`close × volume`) would support a fairer comparison.
+
+## Known limitations
+
+- Cloud loading and dbt execution require user-provisioned Azure and Snowflake resources; they have not been presented as a currently hosted service.
+- The pipeline refreshes the complete fixed date range; there is no incremental loading or orchestration.
+- The dashboard source file is not included, only its screenshot.
+- The return comparison does not include volatility, Sharpe ratio, dividends, or other risk measures.

@@ -1,28 +1,30 @@
 import os
+from pathlib import Path
+
 from azure.storage.blob import BlobServiceClient
 from dotenv import load_dotenv
 
-load_dotenv()
 
-CONNECTION_STRING = os.getenv("AZURE_CONNECTION_STRING")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_FILE = PROJECT_ROOT / "data" / "all_stocks.csv"
 CONTAINER_NAME = "raw-data"
-DATA_FOLDER = "data"
+
+load_dotenv(PROJECT_ROOT / ".env")
 
 
-def upload_files():
-    client = BlobServiceClient.from_connection_string(CONNECTION_STRING)
-    container = client.get_container_client(CONTAINER_NAME)
+def upload_file() -> None:
+    connection_string = os.getenv("AZURE_CONNECTION_STRING")
+    if not connection_string:
+        raise RuntimeError("AZURE_CONNECTION_STRING is missing. Set it in the project-root .env file.")
+    if not DATA_FILE.is_file():
+        raise FileNotFoundError(f"{DATA_FILE} does not exist. Run etl/extract_stock_data.py first.")
 
-    for file_name in os.listdir(DATA_FOLDER):
-        if file_name.endswith(".csv"):
-            file_path = os.path.join(DATA_FOLDER, file_name)
-            print(f"Uploading {file_name}...")
-            with open(file_path, "rb") as data:
-                container.upload_blob(name=file_name, data=data, overwrite=True)
-            print(f"Done: {file_name}")
-
-    print("All files uploaded.")
+    service = BlobServiceClient.from_connection_string(connection_string)
+    blob = service.get_blob_client(container=CONTAINER_NAME, blob=DATA_FILE.name)
+    with DATA_FILE.open("rb") as data:
+        blob.upload_blob(data, overwrite=True)
+    print(f"Uploaded {DATA_FILE.name} to container {CONTAINER_NAME}.")
 
 
 if __name__ == "__main__":
-    upload_files()
+    upload_file()

@@ -19,7 +19,8 @@ mart as (
         round(avg(close), 2) as avg_close,
         round(min(close), 2) as min_close,
         round(max(close), 2) as max_close,
-        round(avg(daily_return), 6) as avg_daily_return_pct,
+        -- Store the return as a fraction (0.002 = 0.2%); format as a percentage in Power BI.
+        round(avg(daily_return), 6) as avg_daily_return,
         round(avg(moving_avg_7d), 2) as avg_moving_avg_7d,
         sum(volume) as total_volume
     from staging
@@ -27,4 +28,3 @@ mart as (
 )
 
 select * from mart
-order by ticker, report_month desc
