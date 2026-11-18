@@ -2,26 +2,36 @@ version: 2
 
 sources:
   - name: raw
+    description: "Daily stock prices loaded from the combined all_stocks.csv file."
     database: STOCK_MARKET
     schema: RAW
     tables:
       - name: stock_prices
+        description: "Raw daily adjusted OHLCV data and derived daily metrics for the seven selected tickers."
         columns:
           - name: ticker
+            description: "Stock ticker symbol."
+            tests:
+              - not_null
+          - name: date
+            description: "Trading date for the daily observation."
             tests:
               - not_null
 
-models:  # <--- To musi być w tej samej linii co 'sources:'
+models:
   - name: stg_stock_prices
-    description: "Model stagingowy..."
+    description: "Clean daily stock prices at one row per ticker and trading date. Exact duplicate rows are removed."
     columns:
       - name: stock_id
+        description: "Surrogate key generated from ticker and date."
         tests:
           - unique
           - not_null
       - name: ticker
+        description: "Stock ticker symbol."
         tests:
           - not_null
       - name: date
+        description: "Trading date for the daily observation."
         tests:
           - not_null
